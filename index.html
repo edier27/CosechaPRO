@@ -890,22 +890,17 @@ function abrirCosecha(id){
   var item=id?state.cosechas.find(function(x){return x.id===id;}):null;
   document.getElementById('cosecha-id').value=item?item.id:'';
   document.getElementById('cosecha-fecha').value=item?item.fecha:hoyCol();
-  document.getElementById('cosecha-cps').value=item?item.kilosCps:'';
-  document.getElementById('cosecha-perg').value=item?item.kilosPerg:'';
+  document.getElementById('cosecha-perg').value=item?(item.kilosPerg||0):'';
   document.getElementById('cosecha-precio').value=item?item.precio:(state.config.precioCps||'');
   document.getElementById('cosecha-notas').value=item?item.notas:'';
-  document.getElementById('m-cosecha-title').textContent=item?'✏️ Editar Cosecha':'☕ Nueva Cosecha';
-  fillRecSelect(['cosecha-rec']);if(item)document.getElementById('cosecha-rec').value=item.recolectorId||'';
+  document.getElementById('m-cosecha-title').textContent=item?'✏️ Editar Cosecha':'☕ Registrar Cosecha';
+  fillRecSelect(['cosecha-rec']);
+  if(item)document.getElementById('cosecha-rec').value=item.recolectorId||'';
   document.getElementById('cosecha-lote').value=item?item.lote:'';
-  fillLotes();calcCosecha();
+  fillLotes();
+  renderTurnoFields(item);
   openModal('m-cosecha');
 }
-function calcCosecha(){
-  var k=Number(document.getElementById('cosecha-cps').value)||0;
-  var p=Number(document.getElementById('cosecha-precio').value)||0;
-  var el=document.getElementById('cosecha-calc');if(el)el.textContent=fmt(k*p);
-}
-document.addEventListener('input',function(e){if(['cosecha-cps','cosecha-precio'].includes(e.target.id))calcCosecha();});
 
 function renderTurnoFields(item){
   var turnos=state.config.turnos||[{label:'Turno 1',desde:'5:00 AM',hasta:'8:00 AM'},{label:'Turno 2',desde:'8:00 AM',hasta:'12:00 PM'},{label:'Turno 3',desde:'12:00 PM',hasta:'6:00 PM'}];
