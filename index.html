@@ -605,7 +605,7 @@ var state={cosechas:[],recolectores:[],ventas:[],gastos:[],fiado:[],inventario:[
 var currentUser=null;
 
 // ── Hash ─────────────────────────────────────────────────────────────────────
-function _hash(s){var h=0;for(var i=0;i<s.length;i++)h=(Math.imul(31,h)+s.charCodeAt(i))|0;return Math.abs(h).toString(36).toUpperCase().padStart(6,'0');}
+function _hash(str){var h=5381;for(var i=0;i<str.length;i++){h=((h<<5)+h)^str.charCodeAt(i);h=h>>>0;}return h.toString(36).toUpperCase().padStart(8,'0').slice(-8);}
 
 // ── Verificar código ────────────────────────────────────────────────────────
 function verificarCodigo(raw){
