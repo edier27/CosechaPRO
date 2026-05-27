@@ -511,7 +511,7 @@ body.light-mode input:not([type=color]):not([type=range]),body.light-mode select
   <div id="cosecha-total-preview" style="padding:12px 16px;background:rgba(123,170,40,0.08);border-radius:10px;border:1px solid rgba(123,170,40,0.2);margin:10px 0;font-size:14px;min-height:40px;display:flex;align-items:center;gap:16px"></div>
   <div class="form-grid">
     <div class="form-group"><label>💰 Precio x kg (COP)</label><input type="number" id="cosecha-precio" placeholder="0" oninput="calcTurnos()"></div>
-    <div class="form-group"><label>Kg Pergamino seco</label><input type="number" id="cosecha-perg" placeholder="0" min="0" step="0.1"></div>
+    
   </div>
   <div class="form-group"><label>📝 Notas</label><input id="cosecha-notas" placeholder="Observaciones..."></div>
   <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
@@ -648,6 +648,7 @@ var _LS='GLA2024TECHREPAIR', _sessId='s'+Date.now().toString(36);
 var _lastTs=0, _clientRef=null;
 
 // ── State ───────────────────────────────────────────────────────────────────
+var DEFAULT_TURNOS=[{label:'Turno 1'},{label:'Turno 2'},{label:'Turno 3'}];
 var state={cosechas:[],recolectores:[],ventas:[],gastos:[],fiado:[],inventario:[],empleados:[],config:{turnos:[{label:'Turno 1',desde:'5:00 AM',hasta:'8:00 AM'},{label:'Turno 2',desde:'8:00 AM',hasta:'12:00 PM'},{label:'Turno 3',desde:'12:00 PM',hasta:'6:00 PM'}]}};
 var currentUser=null;
 
@@ -932,7 +933,7 @@ function abrirCosecha(id){
   var item=id?state.cosechas.find(function(x){return x.id===id;}):null;
   document.getElementById('cosecha-id').value=item?item.id:'';
   document.getElementById('cosecha-fecha').value=item?item.fecha:hoyCol();
-  document.getElementById('cosecha-perg').value=item?(item.kilosPerg||0):'';
+
   document.getElementById('cosecha-precio').value=item?item.precio:(state.config.precioCps||'');
   document.getElementById('cosecha-notas').value=item?item.notas:'';
   document.getElementById('m-cosecha-title').textContent=item?'✏️ Editar Cosecha':'☕ Registrar Cosecha';
@@ -992,14 +993,14 @@ function verHistorialRec(recId){
   openModal('m-historial');
 }
 function renderTurnoFields(item){
-  var turnos=state.config.turnos||[{label:'Turno 1',desde:'5:00 AM',hasta:'8:00 AM'},{label:'Turno 2',desde:'8:00 AM',hasta:'12:00 PM'},{label:'Turno 3',desde:'12:00 PM',hasta:'6:00 PM'}];
+  var turnos=(state.config&&state.config.turnos&&state.config.turnos.length)?state.config.turnos:DEFAULT_TURNOS;
   var cont=document.getElementById('turnos-container');
   if(!cont)return;
   cont.innerHTML=turnos.map(function(t,i){
     var kg=item&&item.turnos&&item.turnos[i]?item.turnos[i].kilos:'';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);margin-bottom:8px">'+
-      '<div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--accent)">'+t.label+'</div>'+
-      '<div style="font-size:11px;color:var(--text2)">'+t.desde+' → '+t.hasta+'</div></div>'+
+    var labels=['🌅 Mañana (Turno 1)','☀️ Medio día (Turno 2)','🌇 Tarde (Turno 3)'];
+    return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);margin-bottom:8px">'+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--accent)">'+(labels[i]||t.label)+'</div></div>'+
       '<div style="display:flex;align-items:center;gap:6px">'+
       '<input type="number" id="t'+(i+1)+'-kg" value="'+kg+'" placeholder="0" min="0" step="0.1" oninput="calcTurnos()"'+
       ' style="width:90px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;font-weight:700;text-align:center">'+
@@ -1034,7 +1035,7 @@ function saveCosecha(){
   var lote=document.getElementById('cosecha-lote').value||'';
   var precio=Number(document.getElementById('cosecha-precio').value)||Number(state.config.precioCps)||0;
   var notas=document.getElementById('cosecha-notas').value||'';
-  var turnos=state.config.turnos||[];
+  var turnos=(state.config&&state.config.turnos&&state.config.turnos.length)?state.config.turnos:DEFAULT_TURNOS;
   var turnoData=turnos.map(function(t,i){
     var kg=Number(document.getElementById('t'+(i+1)+'-kg').value)||0;
     return{label:t.label,desde:t.desde,hasta:t.hasta,kilos:kg};
@@ -1051,7 +1052,7 @@ function saveCosecha(){
     lote:lote,
     turnos:turnoData,
     kilosCps:totalKg,
-    kilosPerg:Number(document.getElementById('cosecha-perg').value)||0,
+    kilosPerg:0,
     precio:precio,
     totalPago:totalKg*precio,
     notas:notas
@@ -1066,10 +1067,11 @@ function saveCosecha(){
 }
 // Calcular total al ingresar kilos en cualquier turno
 function calcTurnos(){
-  var turnos=state.config.turnos||[];
+  var turnos=(state.config&&state.config.turnos&&state.config.turnos.length)?state.config.turnos:DEFAULT_TURNOS;
   var total=0;
   turnos.forEach(function(_,i){
-    total+=Number(document.getElementById('t'+(i+1)+'-kg').value)||0;
+    var el=document.getElementById('t'+(i+1)+'-kg');
+    total+=el?Number(el.value)||0:0;
   });
   var precio=Number(document.getElementById('cosecha-precio').value)||0;
   var el=document.getElementById('cosecha-total-preview');
