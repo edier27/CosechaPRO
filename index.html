@@ -957,6 +957,129 @@ function registrarKilosRec(recId){
 }
 
 // Ver historial de cosechas de un recolector
+
+// ── RESUMEN SEMANAL Y MENSUAL ─────────────────────────────────────────────────
+function verResumenRec(recId){
+  var rec=state.recolectores.find(function(r){return r.id===recId;});
+  if(!rec)return;
+
+  var hoy=hoyCol();
+  var hoyDate=new Date(hoy+'T12:00:00');
+
+  // Semana actual (Lunes a Domingo)
+  var diaSem=hoyDate.getDay(); // 0=Dom
+  var lunes=new Date(hoyDate); lunes.setDate(hoyDate.getDate()-(diaSem===0?6:diaSem-1));
+  var domingo=new Date(lunes); domingo.setDate(lunes.getDate()+6);
+  var semDesde=lunes.toISOString().slice(0,10);
+  var semHasta=domingo.toISOString().slice(0,10);
+
+  // Mes actual
+  var mesDesde=hoy.slice(0,7)+'-01';
+  var mesHasta=hoy.slice(0,7)+'-31';
+
+  var cosRec=state.cosechas.filter(function(c){return c.recolectorId===recId;});
+
+  // ─ Resumen semanal por día
+  var diasSemana=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  var semHtml='<div class="tbl-wrap"><table><thead><tr><th>Día</th><th>Fecha</th><th>T1</th><th>T2</th><th>T3</th><th>Total kg</th><th>Total $</th></tr></thead><tbody>';
+  var semKgTotal=0, semPagoTotal=0;
+  for(var i=0;i<7;i++){
+    var d=new Date(lunes); d.setDate(lunes.getDate()+i);
+    var iso=d.toISOString().slice(0,10);
+    var cos=cosRec.find(function(c){return c.fecha===iso;});
+    var kg=cos?Number(cos.kilosCps||0):0;
+    var pago=cos?(cos.totalPago||(kg*Number(cos.precio||0))):0;
+    var t1=cos&&cos.turnos&&cos.turnos[0]?Number(cos.turnos[0].kilos||0):0;
+    var t2=cos&&cos.turnos&&cos.turnos[1]?Number(cos.turnos[1].kilos||0):0;
+    var t3=cos&&cos.turnos&&cos.turnos[2]?Number(cos.turnos[2].kilos||0):0;
+    var esHoy=iso===hoy;
+    semKgTotal+=kg; semPagoTotal+=pago;
+    semHtml+='<tr style="'+(esHoy?'background:rgba(123,170,40,0.08);font-weight:700':'')+'">'+
+      '<td><b>'+diasSemana[i]+'</b>'+(esHoy?' 🔵':'')+'</td>'+
+      '<td style="color:var(--text2);font-size:12px">'+d.toLocaleDateString('es-CO',{day:'2-digit',month:'short'})+'</td>'+
+      '<td style="color:'+(t1>0?'var(--accent)':'var(--text3)')+'">'+fmtKg(t1)+'</td>'+
+      '<td style="color:'+(t2>0?'var(--accent)':'var(--text3)')+'">'+fmtKg(t2)+'</td>'+
+      '<td style="color:'+(t3>0?'var(--accent)':'var(--text3)')+'">'+fmtKg(t3)+'</td>'+
+      '<td><b style="color:var(--accent)">'+fmtKg(kg)+'</b></td>'+
+      '<td><b style="color:var(--green)">'+fmt(pago)+'</b></td>'+
+    '</tr>';
+  }
+  semHtml+='<tr style="background:rgba(123,170,40,0.1);font-weight:800">'+
+    '<td colspan="5" style="color:var(--text)">TOTAL SEMANA</td>'+
+    '<td style="color:var(--accent)">'+fmtKg(semKgTotal)+'</td>'+
+    '<td style="color:var(--green)">'+fmt(semPagoTotal)+'</td>'+
+  '</tr></tbody></table></div>';
+
+  // ─ Resumen mensual por semana
+  var mesStr=hoy.slice(0,7);
+  var cosMes=cosRec.filter(function(c){return c.fecha&&c.fecha.startsWith(mesStr);});
+  var mesKgTotal=cosMes.reduce(function(a,c){return a+Number(c.kilosCps||0);},0);
+  var mesPagoTotal=cosMes.reduce(function(a,c){return a+(c.totalPago||(Number(c.kilosCps||0)*Number(c.precio||0)));},0);
+  var mesDias=cosMes.length;
+
+  // Agrupar por semana del mes
+  var semanas={};
+  cosMes.forEach(function(c){
+    var fd=new Date(c.fecha+'T12:00:00');
+    var ds=fd.getDay(); var lun=new Date(fd); lun.setDate(fd.getDate()-(ds===0?6:ds-1));
+    var semKey=lun.toISOString().slice(0,10);
+    if(!semanas[semKey])semanas[semKey]={desde:semKey,kg:0,pago:0,dias:0};
+    semanas[semKey].kg+=Number(c.kilosCps||0);
+    semanas[semKey].pago+=(c.totalPago||(Number(c.kilosCps||0)*Number(c.precio||0)));
+    semanas[semKey].dias++;
+  });
+
+  var mensHtml='<div class="tbl-wrap"><table><thead><tr><th>Semana</th><th>Días trabajados</th><th>Total kg</th><th>Total $</th><th>Prom/día</th></tr></thead><tbody>';
+  if(Object.keys(semanas).length===0){
+    mensHtml+='<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:20px">Sin registros este mes</td></tr>';
+  } else {
+    Object.keys(semanas).sort().forEach(function(k){
+      var s=semanas[k];
+      var fd=new Date(k+'T12:00:00');
+      var fh=new Date(k+'T12:00:00'); fh.setDate(fd.getDate()+6);
+      var label=fd.toLocaleDateString('es-CO',{day:'2-digit',month:'short'})+' - '+fh.toLocaleDateString('es-CO',{day:'2-digit',month:'short'});
+      mensHtml+='<tr>'+
+        '<td style="font-size:12px">'+label+'</td>'+
+        '<td style="text-align:center">'+s.dias+' días</td>'+
+        '<td><b style="color:var(--accent)">'+fmtKg(s.kg)+'</b></td>'+
+        '<td><b style="color:var(--green)">'+fmt(s.pago)+'</b></td>'+
+        '<td style="color:var(--text2)">'+fmtKg(s.dias>0?s.kg/s.dias:0)+'/día</td>'+
+      '</tr>';
+    });
+    mensHtml+='<tr style="background:rgba(123,170,40,0.1);font-weight:800">'+
+      '<td>TOTAL MES</td>'+
+      '<td style="text-align:center">'+mesDias+' días</td>'+
+      '<td style="color:var(--accent)">'+fmtKg(mesKgTotal)+'</td>'+
+      '<td style="color:var(--green)">'+fmt(mesPagoTotal)+'</td>'+
+      '<td style="color:var(--text2)">'+fmtKg(mesDias>0?mesKgTotal/mesDias:0)+'/día</td>'+
+    '</tr>';
+  }
+  mensHtml+='</tbody></table></div>';
+
+  // Llenar modal
+  document.getElementById('res-titulo').textContent='📊 '+rec.nombre+' — Resumen';
+  document.getElementById('res-resumen-cards').innerHTML=
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">'+
+    '<div style="background:rgba(123,170,40,0.1);padding:10px 16px;border-radius:10px;flex:1;min-width:120px">'+
+      '<div style="font-size:11px;color:var(--text2)">Esta semana</div>'+
+      '<div style="font-size:18px;font-weight:800;color:var(--accent)">'+fmtKg(semKgTotal)+'</div>'+
+      '<div style="font-size:12px;color:var(--green)">'+fmt(semPagoTotal)+'</div>'+
+    '</div>'+
+    '<div style="background:rgba(0,160,80,0.08);padding:10px 16px;border-radius:10px;flex:1;min-width:120px">'+
+      '<div style="font-size:11px;color:var(--text2)">Este mes</div>'+
+      '<div style="font-size:18px;font-weight:800;color:var(--green)">'+fmtKg(mesKgTotal)+'</div>'+
+      '<div style="font-size:12px;color:var(--green)">'+fmt(mesPagoTotal)+'</div>'+
+    '</div>'+
+    '<div style="background:rgba(200,168,75,0.1);padding:10px 16px;border-radius:10px;flex:1;min-width:120px">'+
+      '<div style="font-size:11px;color:var(--text2)">Días trabajados</div>'+
+      '<div style="font-size:18px;font-weight:800;color:var(--gold)">'+mesDias+'</div>'+
+      '<div style="font-size:12px;color:var(--text2)">este mes</div>'+
+    '</div>'+
+    '</div>';
+  document.getElementById('res-semanal').innerHTML='<div style="font-size:12px;font-weight:700;color:var(--text2);margin:12px 0 6px;text-transform:uppercase">Semana actual ('+semDesde+' al '+semHasta+')</div>'+semHtml;
+  document.getElementById('res-mensual').innerHTML='<div style="font-size:12px;font-weight:700;color:var(--text2);margin:16px 0 6px;text-transform:uppercase">Resumen mensual — '+new Date(mesDesde+'T12:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'})+'</div>'+mensHtml;
+  openModal('m-resumen');
+}
 function verHistorialRec(recId){
   var rec=state.recolectores.find(function(r){return r.id===recId;});
   if(!rec)return;
@@ -1227,6 +1350,8 @@ function recRenderDia(iso){
       '<button class="btn '+(registrado?'btn-secondary':'btn-primary')+' btn-sm" onclick="registrarKilosRecFecha(\''+r.id+'\',\''+iso+'\',this)" style="width:100%;margin-top:6px;font-size:12px">'+
         (registrado?'✏️ Editar cosecha':'☕ Registrar cosecha')+
       '</button>'+
+      '<button class="btn btn-secondary btn-sm" onclick="verResumenRec(\''+r.id+'\',this)" title="Resumen" style="font-size:12px">📊</button>'+
+      '</div>'+
     '</div>';
   });
   html += '</div>';
