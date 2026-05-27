@@ -902,6 +902,53 @@ function abrirCosecha(id){
   openModal('m-cosecha');
 }
 
+
+// Registrar kilos directamente desde la tabla de recolectores
+function registrarKilosRec(recId){
+  abrirCosecha(null); // abrir modal vacío
+  setTimeout(function(){
+    // Pre-seleccionar el recolector
+    var sel=document.getElementById('cosecha-rec');
+    if(sel){sel.value=recId;calcTurnos();}
+  },50);
+}
+
+// Ver historial de cosechas de un recolector
+function verHistorialRec(recId){
+  var rec=state.recolectores.find(function(r){return r.id===recId;});
+  if(!rec)return;
+  var registros=state.cosechas.filter(function(c){return c.recolectorId===recId;}).slice().reverse();
+  var totalKg=registros.reduce(function(a,c){return a+Number(c.kilosCps||0);},0);
+  var totalPago=registros.reduce(function(a,c){return a+(c.totalPago||(Number(c.kilosCps||0)*Number(c.precio||0)));},0);
+  // Mostrar en modal de historial
+  document.getElementById('hist-titulo').textContent='📋 Historial — '+rec.nombre;
+  document.getElementById('hist-resumen').innerHTML=
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+
+    '<span style="background:rgba(123,170,40,0.1);padding:6px 12px;border-radius:8px;font-size:13px">☕ Total: <b style="color:var(--accent)">'+fmtKg(totalKg)+'</b></span>'+
+    '<span style="background:rgba(0,180,80,0.1);padding:6px 12px;border-radius:8px;font-size:13px">💰 Ganado: <b style="color:var(--green)">'+fmt(totalPago)+'</b></span>'+
+    '<span style="background:rgba(200,168,75,0.1);padding:6px 12px;border-radius:8px;font-size:13px">📅 Días: <b style="color:var(--gold)">'+registros.length+'</b></span>'+
+    '</div>';
+  document.getElementById('hist-body').innerHTML=registros.length===0
+    ?'<tr><td colspan="5"><div class="empty-state" style="padding:20px"><p>Sin registros</p></div></td></tr>'
+    :registros.map(function(c){
+      var total=c.totalPago||(Number(c.kilosCps||0)*Number(c.precio||0));
+      var turnosHtml='';
+      if(c.turnos&&c.turnos.length){
+        turnosHtml='<div style="font-size:10px;margin-top:2px">'+
+          c.turnos.filter(function(t){return t.kilos>0;}).map(function(t){
+            return '<span style="background:rgba(123,170,40,0.1);padding:1px 5px;border-radius:4px;margin-right:2px">'+t.label+': <b>'+fmtKg(t.kilos)+'</b></span>';
+          }).join('')+'</div>';
+      }
+      return '<tr>'+
+        '<td>'+fmtF(c.fecha)+'</td>'+
+        '<td>'+esc(c.lote||'—')+'</td>'+
+        '<td><b style="color:var(--accent)">'+fmtKg(c.kilosCps)+'</b>'+turnosHtml+'</td>'+
+        '<td style="color:var(--text2)">'+fmt(c.precio||0)+'/kg</td>'+
+        '<td><b style="color:var(--green)">'+fmt(total)+'</b></td>'+
+        '</tr>';
+    }).join('');
+  openModal('m-historial');
+}
 function renderTurnoFields(item){
   var turnos=state.config.turnos||[{label:'Turno 1',desde:'5:00 AM',hasta:'8:00 AM'},{label:'Turno 2',desde:'8:00 AM',hasta:'12:00 PM'},{label:'Turno 3',desde:'12:00 PM',hasta:'6:00 PM'}];
   var cont=document.getElementById('turnos-container');
@@ -1006,7 +1053,14 @@ function renderRecolectores(){
   if(rs)rs.innerHTML=[{icon:'👷',val:activos.length+'',lbl:'Activos',color:'var(--accent)'},{icon:'☕',val:fmtKg(totalKg),lbl:'Total kilos',color:'var(--gold)'},{icon:'💰',val:fmt(totalPag),lbl:'Total pagado',color:'var(--green)'},{icon:'📋',val:fmt(totalAnt),lbl:'Anticipos pendientes',color:'var(--yellow)'}].map(function(s){return '<div class="stat-card"><div class="stat-icon" style="background:rgba(123,170,40,0.1)">'+s.icon+'</div><div class="stat-val" style="color:'+s.color+'">'+s.val+'</div><div class="stat-lbl">'+s.lbl+'</div></div>';}).join('');
   var tb=document.getElementById('tbl-recolectores');if(!tb)return;
   if(state.recolectores.length===0){tb.innerHTML='<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">👷</div><h3>Sin recolectores</h3><p>Registra los recolectores de la finca</p></div></td></tr>';return;}
+  var _hoy=hoyCol();
   tb.innerHTML=state.recolectores.map(function(r){
+    var kg=getKgRec(r.id),pag=getPagadoRec(r.id),ant=getSaldoFiado(r.id);
+    var cosHoy=state.cosechas.filter(function(x){return x.recolectorId===r.id&&x.fecha===_hoy;});
+    var kgHoy=cosHoy.reduce(function(a,x){return a+Number(x.kilosCps||0);},0);
+    var hoyBadge=kgHoy>0
+      ?'<span style="background:rgba(123,170,40,0.15);color:var(--accent);font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px">Hoy: '+fmtKg(kgHoy)+'</span>'
+      :'<span style="background:rgba(200,168,75,0.1);color:var(--gold);font-size:10px;padding:1px 7px;border-radius:20px;margin-left:6px">Sin registro hoy</span>';
     var kg=getKgRec(r.id),pag=getPagadoRec(r.id),ant=getSaldoFiado(r.id);
     return '<tr><td><b>'+esc(r.nombre)+'</b><br><span style="color:var(--text2);font-size:11px">'+esc(r.municipio||'')+'</span></td><td style="color:var(--text2)">'+esc(r.cedula||'—')+'</td><td>'+esc(r.telefono||'—')+'</td><td style="color:var(--accent)"><b>'+fmtKg(kg)+'</b></td><td style="color:var(--green)"><b>'+fmt(pag)+'</b></td><td style="color:'+(ant>0?'var(--yellow)':'var(--text2)')+'"><b>'+fmt(ant)+'</b></td><td><span class="badge '+(r.estado==='activo'?'badge-green':'badge-gray')+'">'+r.estado+'</span></td><td style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="abrirRecolector(\''+r.id+'\')">✏️</button><button class="btn btn-danger btn-sm" onclick="delItem(\'recolectores\',\''+r.id+'\')">🗑</button></td></tr>';
   }).join('');
