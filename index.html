@@ -321,14 +321,56 @@ body.light-mode input:not([type=color]):not([type=range]),body.light-mode select
 <!-- RECOLECTORES -->
 <div class="page" id="page-recolectores">
   <div class="page-header">
-    <div><div class="page-title">👷 Recolectores</div><div class="page-sub">Gestión de recolectores y pagos por kilo</div></div>
+    <div><div class="page-title">👷 Recolectores</div><div class="page-sub">Cosecha por día — selecciona una fecha</div></div>
     <button class="btn btn-primary" onclick="abrirRecolector()">+ Nuevo Recolector</button>
   </div>
+  <!-- Stats generales -->
   <div class="stats-grid" id="rec-stats"></div>
-  <div class="card" style="padding:0;overflow:hidden"><div class="tbl-wrap"><table>
-    <thead><tr><th>Recolector</th><th>Cédula</th><th>Teléfono</th><th>Total kilos</th><th>Total pagado</th><th>Anticipos</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody id="tbl-recolectores"></tbody>
-  </table></div></div>
+
+  <!-- Layout: calendario + panel del día -->
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:18px;align-items:start" id="rec-layout">
+
+    <!-- Calendario -->
+    <div class="card" style="padding:18px;position:sticky;top:70px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <button class="btn btn-secondary btn-sm" onclick="recCalMes(-1)">‹</button>
+        <div style="font-weight:700;font-size:14px;color:var(--text)" id="rec-cal-titulo"></div>
+        <button class="btn btn-secondary btn-sm" onclick="recCalMes(1)">›</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:11px;color:var(--text2);font-weight:600;margin-bottom:6px">
+        <span>Do</span><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sá</span>
+      </div>
+      <div id="rec-cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px"></div>
+      <div style="margin-top:12px;font-size:11px;color:var(--text2);display:flex;gap:10px;flex-wrap:wrap">
+        <span>🟢 Con cosecha</span>
+        <span>🔵 Hoy</span>
+        <span>🟡 Seleccionado</span>
+      </div>
+    </div>
+
+    <!-- Panel del día seleccionado -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--text)" id="rec-dia-titulo">Selecciona un día</div>
+          <div style="font-size:12px;color:var(--text2)" id="rec-dia-sub"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="rec-reg-btn" onclick="registrarKilosDia()" style="display:none">☕ Registrar cosecha del día</button>
+      </div>
+      <div id="rec-dia-cards"></div>
+    </div>
+  </div>
+
+  <!-- Lista completa de recolectores (colapsable) -->
+  <div style="margin-top:20px">
+    <button class="btn btn-secondary btn-sm" onclick="toggleListaRec()" id="btn-lista-rec" style="margin-bottom:10px">👥 Ver lista de recolectores</button>
+    <div id="lista-rec-wrap" style="display:none">
+      <div class="card" style="padding:0;overflow:hidden"><div class="tbl-wrap"><table>
+        <thead><tr><th>Recolector</th><th>Teléfono</th><th>Total kilos</th><th>Total pagado</th><th>Anticipos</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody id="tbl-recolectores"></tbody>
+      </table></div></div>
+    </div>
+  </div>
 </div>
 <!-- VENTAS -->
 <div class="page" id="page-ventas">
@@ -1017,6 +1059,9 @@ function saveCosecha(){
   var idx=state.cosechas.findIndex(function(x){return x.id===item.id;});
   if(idx>=0)state.cosechas[idx]=item;else state.cosechas.push(item);
   save();closeModal('m-cosecha');renderCosecha();renderDashboard();
+  // Actualizar vista de calendario si estamos en la página de recolectores
+  if(_recCalFecha) recRenderDia(_recCalFecha);
+  if(typeof recRenderCal==='function') recRenderCal();
   toast('✅ Cosecha guardada: '+fmtKg(totalKg)+' — '+fmt(item.totalPago),'success');
 }
 // Calcular total al ingresar kilos en cualquier turno
@@ -1044,7 +1089,185 @@ function abrirRecolector(id){
   document.getElementById('m-rec-title').textContent=item?'✏️ Editar Recolector':'👷 Nuevo Recolector';
   openModal('m-recolector');
 }
+
+// ── CALENDARIO RECOLECTORES ──────────────────────────────────────────────────
+var _recCalFecha = null; // fecha seleccionada "YYYY-MM-DD"
+var _recCalMes   = null; // Date del mes mostrado
+
+function recIniciarCal(){
+  if(!_recCalMes) _recCalMes = new Date(colombiaDate().getFullYear(), colombiaDate().getMonth(), 1);
+  if(!_recCalFecha) _recCalFecha = hoyCol();
+  recRenderCal();
+  recRenderDia(_recCalFecha);
+}
+
+function recCalMes(dir){
+  _recCalMes = new Date(_recCalMes.getFullYear(), _recCalMes.getMonth() + dir, 1);
+  recRenderCal();
+}
+
+function recRenderCal(){
+  var hoy = hoyCol();
+  var anio = _recCalMes.getFullYear();
+  var mes  = _recCalMes.getMonth();
+  var titulo = new Date(anio, mes, 1).toLocaleDateString('es-CO',{month:'long',year:'numeric'});
+  var tEl = document.getElementById('rec-cal-titulo');
+  if(tEl) tEl.textContent = titulo.charAt(0).toUpperCase()+titulo.slice(1);
+
+  // Fechas con cosecha registrada este mes
+  var mesStr = anio+'-'+(mes<9?'0':'')+(mes+1);
+  var diasConCosecha = {};
+  state.cosechas.forEach(function(c){ if(c.fecha&&c.fecha.startsWith(mesStr)) diasConCosecha[c.fecha]=true; });
+
+  var primerDia = new Date(anio, mes, 1).getDay(); // 0=Dom
+  var ultimoDia = new Date(anio, mes+1, 0).getDate();
+
+  var grid = document.getElementById('rec-cal-grid');
+  if(!grid) return;
+
+  var html = '';
+  // Espacios vacíos antes del primer día
+  for(var i=0; i<primerDia; i++){
+    html += '<div></div>';
+  }
+  // Días del mes
+  for(var d=1; d<=ultimoDia; d++){
+    var iso = anio+'-'+(mes<9?'0':'')+(mes+1)+'-'+(d<10?'0':'')+d;
+    var isHoy = iso===hoy;
+    var isSel = iso===_recCalFecha;
+    var tieneCosecha = diasConCosecha[iso];
+    var bg = isSel ? 'var(--gold)' : isHoy ? 'var(--accent)' : tieneCosecha ? 'rgba(123,170,40,0.2)' : 'transparent';
+    var color = isSel ? '#0A0C07' : isHoy ? '#0A0C07' : tieneCosecha ? 'var(--accent)' : 'var(--text2)';
+    var fw = isSel||isHoy ? '800' : tieneCosecha ? '700' : '400';
+    var dot = tieneCosecha&&!isSel&&!isHoy ? '<div style="width:4px;height:4px;background:var(--accent);border-radius:50%;margin:1px auto 0"></div>' : '';
+    html += '<div onclick="recSelDia(\'' + iso + '\')" style="cursor:pointer;padding:5px 2px;border-radius:7px;text-align:center;background:' + bg + ';color:' + color + ';font-weight:' + fw + ';font-size:12px;transition:.15s">' + d + dot + '</div>';
+  }
+  grid.innerHTML = html;
+}
+
+function recSelDia(iso){
+  _recCalFecha = iso;
+  recRenderCal();
+  recRenderDia(iso);
+}
+
+function recRenderDia(iso){
+  if(!iso) return;
+  var tituloEl = document.getElementById('rec-dia-titulo');
+  var subEl    = document.getElementById('rec-dia-sub');
+  var cardsEl  = document.getElementById('rec-dia-cards');
+  var btnEl    = document.getElementById('rec-reg-btn');
+  if(!cardsEl) return;
+
+  // Formato fecha bonito
+  var d = new Date(iso+'T12:00:00');
+  var fechaStr = d.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  fechaStr = fechaStr.charAt(0).toUpperCase()+fechaStr.slice(1);
+  if(tituloEl) tituloEl.textContent = fechaStr;
+
+  // Cosechas de ese día
+  var cosDelDia = state.cosechas.filter(function(c){ return c.fecha===iso; });
+  var totalKgDia = cosDelDia.reduce(function(a,c){ return a+Number(c.kilosCps||0); },0);
+  var totalPagDia = cosDelDia.reduce(function(a,c){ return a+(c.totalPago||(Number(c.kilosCps||0)*Number(c.precio||0))); },0);
+  if(subEl) subEl.textContent = cosDelDia.length>0
+    ? 'Total del día: '+fmtKg(totalKgDia)+' — '+fmt(totalPagDia)
+    : 'Sin cosechas registradas';
+
+  if(btnEl) btnEl.style.display = 'block';
+
+  if(state.recolectores.length===0){
+    cardsEl.innerHTML='<div class="card" style="padding:30px;text-align:center;color:var(--text2)"><div style="font-size:36px">👷</div><p>Registra recolectores primero</p></div>';
+    return;
+  }
+
+  // Card por cada recolector activo
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">';
+  state.recolectores.filter(function(r){ return r.estado==='activo'; }).forEach(function(r){
+    var cosRec = cosDelDia.find(function(c){ return c.recolectorId===r.id; });
+    var kgTotal = cosRec ? Number(cosRec.kilosCps||0) : 0;
+    var pago    = cosRec ? (cosRec.totalPago||(kgTotal*Number(cosRec.precio||0))) : 0;
+    var turnos  = cosRec && cosRec.turnos ? cosRec.turnos : [];
+    var registrado = kgTotal > 0;
+
+    var turnosHtml = '';
+    if(registrado && turnos.length){
+      turnosHtml = '<div style="margin:10px 0;display:flex;flex-direction:column;gap:5px">';
+      turnos.forEach(function(t,i){
+        var kg = Number(t.kilos||0);
+        var pct = kgTotal>0 ? Math.round(kg/kgTotal*100) : 0;
+        turnosHtml += '<div style="display:flex;align-items:center;gap:8px">'+
+          '<div style="font-size:11px;color:var(--text2);min-width:60px">'+(t.label||'T'+(i+1))+'</div>'+
+          '<div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden">'+
+            '<div style="height:100%;background:var(--accent);border-radius:3px;width:'+pct+'%"></div>'+
+          '</div>'+
+          '<div style="font-size:11px;font-weight:700;color:'+(kg>0?'var(--accent)':'var(--text3)')+'">'+fmtKg(kg)+'</div>'+
+        '</div>';
+      });
+      turnosHtml += '</div>';
+    } else if(!registrado){
+      turnosHtml = '<div style="margin:10px 0;font-size:12px;color:var(--text3);font-style:italic">Sin cosecha registrada</div>';
+    }
+
+    html += '<div class="card" style="padding:16px;border:2px solid '+(registrado?'rgba(123,170,40,0.3)':'rgba(128,128,128,0.1)')+'">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<div style="width:36px;height:36px;border-radius:50%;background:'+(registrado?'rgba(123,170,40,0.2)':'rgba(128,128,128,0.1)')+';display:flex;align-items:center;justify-content:center;font-size:16px">'+(registrado?'☕':'👷')+'</div>'+
+          '<div>'+
+            '<div style="font-weight:700;font-size:13px;color:var(--text)">'+esc(r.nombre)+'</div>'+
+            '<div style="font-size:11px;color:var(--text2)">'+esc(r.municipio||r.telefono||'')+'</div>'+
+          '</div>'+
+        '</div>'+
+        (registrado
+          ?'<div style="text-align:right"><div style="font-size:15px;font-weight:800;color:var(--accent)">'+fmtKg(kgTotal)+'</div><div style="font-size:11px;color:var(--green)">'+fmt(pago)+'</div></div>'
+          :'<span style="font-size:10px;background:rgba(200,168,75,0.15);color:var(--gold);padding:2px 8px;border-radius:20px">Sin registro</span>')+
+      '</div>'+
+      turnosHtml+
+      '<button class="btn '+(registrado?'btn-secondary':'btn-primary')+' btn-sm" onclick="registrarKilosRecFecha(\''+r.id+'\',\''+iso+'\',this)" style="width:100%;margin-top:6px;font-size:12px">'+
+        (registrado?'✏️ Editar cosecha':'☕ Registrar cosecha')+
+      '</button>'+
+    '</div>';
+  });
+  html += '</div>';
+  cardsEl.innerHTML = html;
+}
+
+function registrarKilosRecFecha(recId, fecha){
+  // Buscar si ya existe cosecha ese día para ese recolector
+  var existente = state.cosechas.find(function(c){ return c.recolectorId===recId && c.fecha===fecha; });
+  abrirCosecha(existente ? existente.id : null);
+  setTimeout(function(){
+    var sel = document.getElementById('cosecha-rec');
+    var fec = document.getElementById('cosecha-fecha');
+    if(sel) { sel.value = recId; }
+    if(fec) { fec.value = fecha; }
+    calcTurnos();
+  }, 60);
+}
+
+function registrarKilosDia(){
+  registrarKilosRecFecha('', _recCalFecha||hoyCol());
+}
+
+function toggleListaRec(){
+  var w = document.getElementById('lista-rec-wrap');
+  var b = document.getElementById('btn-lista-rec');
+  if(!w) return;
+  var vis = w.style.display==='none';
+  w.style.display = vis ? 'block' : 'none';
+  if(b) b.textContent = vis ? '👥 Ocultar lista' : '👥 Ver lista de recolectores';
+}
+
+// Responsive: en móvil ocultar columnas del calendario
+function recCheckResponsive(){
+  var layout = document.getElementById('rec-layout');
+  if(!layout) return;
+  layout.style.gridTemplateColumns = window.innerWidth < 768 ? '1fr' : '280px 1fr';
+}
+window.addEventListener('resize', recCheckResponsive);
+
 function renderRecolectores(){
+  recIniciarCal();
+  recCheckResponsive();
   var activos=state.recolectores.filter(function(r){return r.estado==='activo';});
   var totalKg=state.recolectores.reduce(function(a,r){return a+getKgRec(r.id);},0);
   var totalPag=state.recolectores.reduce(function(a,r){return a+getPagadoRec(r.id);},0);
