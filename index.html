@@ -454,22 +454,27 @@ body.light-mode input:not([type=color]):not([type=range]),body.light-mode select
   </div></nav>
 </div>
 <!-- MODALES -->
-<div class="modal-overlay" id="m-cosecha"><div class="modal">
-  <div class="modal-header"><div class="modal-title" id="m-cosecha-title">☕ Nueva Cosecha</div><button class="modal-close" onclick="closeModal('m-cosecha')">✕</button></div>
+<div class="modal-overlay" id="m-cosecha"><div class="modal" style="max-width:480px">
+  <div class="modal-header"><div class="modal-title" id="m-cosecha-title">☕ Registrar Cosecha</div><button class="modal-close" onclick="closeModal('m-cosecha')">✕</button></div>
   <input type="hidden" id="cosecha-id">
   <div class="form-grid">
-    <div class="form-group"><label>Fecha</label><input type="date" id="cosecha-fecha"></div>
-    <div class="form-group"><label>Recolector</label><select id="cosecha-rec"><option value="">Seleccionar...</option></select></div>
-    <div class="form-group"><label>Lote / Parcela</label><input id="cosecha-lote" placeholder="Ej: Lote 1" list="dl-lotes"></div>
-    <div class="form-group"><label>Kilos cereza (bruto)</label><input type="number" id="cosecha-cps" placeholder="0" min="0" step="0.1"></div>
-    <div class="form-group"><label>Kilos pergamino seco</label><input type="number" id="cosecha-perg" placeholder="0" min="0" step="0.1"></div>
-    <div class="form-group"><label>Precio/kg pagado (COP)</label><input type="number" id="cosecha-precio" placeholder="0"></div>
-    <div class="form-group form-full"><label>Valor calculado</label><div id="cosecha-calc" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent);padding:10px 0">$ 0</div></div>
-    <div class="form-group form-full"><label>Notas</label><input id="cosecha-notas" placeholder="Observaciones..."></div>
+    <div class="form-group"><label>📅 Fecha</label><input type="date" id="cosecha-fecha"></div>
+    <div class="form-group"><label>👷 Recolector</label><select id="cosecha-rec" onchange="calcTurnos()"><option value="">Seleccionar...</option></select></div>
   </div>
+  <div class="form-group"><label>🌿 Lote / Parcela</label><input id="cosecha-lote" placeholder="Ej: Lote A" list="dl-lotes"></div>
+  <!-- 3 turnos dinámicos -->
+  <div style="margin:14px 0 6px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px">☕ Kilos por turno</div>
+  <div id="turnos-container"></div>
+  <!-- Total en tiempo real -->
+  <div id="cosecha-total-preview" style="padding:12px 16px;background:rgba(123,170,40,0.08);border-radius:10px;border:1px solid rgba(123,170,40,0.2);margin:10px 0;font-size:14px;min-height:40px;display:flex;align-items:center;gap:16px"></div>
+  <div class="form-grid">
+    <div class="form-group"><label>💰 Precio x kg (COP)</label><input type="number" id="cosecha-precio" placeholder="0" oninput="calcTurnos()"></div>
+    <div class="form-group"><label>Kg Pergamino seco</label><input type="number" id="cosecha-perg" placeholder="0" min="0" step="0.1"></div>
+  </div>
+  <div class="form-group"><label>📝 Notas</label><input id="cosecha-notas" placeholder="Observaciones..."></div>
   <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
     <button class="btn btn-secondary" onclick="closeModal('m-cosecha')">Cancelar</button>
-    <button class="btn btn-primary" onclick="saveCosecha()">💾 Guardar</button>
+    <button class="btn btn-primary" onclick="saveCosecha()">💾 Guardar Cosecha</button>
   </div>
 </div></div>
 <datalist id="dl-lotes"></datalist>
@@ -601,7 +606,7 @@ var _LS='GLA2024TECHREPAIR', _sessId='s'+Date.now().toString(36);
 var _lastTs=0, _clientRef=null;
 
 // ── State ───────────────────────────────────────────────────────────────────
-var state={cosechas:[],recolectores:[],ventas:[],gastos:[],fiado:[],inventario:[],empleados:[],config:{}};
+var state={cosechas:[],recolectores:[],ventas:[],gastos:[],fiado:[],inventario:[],empleados:[],config:{turnos:[{label:'Turno 1',desde:'5:00 AM',hasta:'8:00 AM'},{label:'Turno 2',desde:'8:00 AM',hasta:'12:00 PM'},{label:'Turno 3',desde:'12:00 PM',hasta:'6:00 PM'}]}};
 var currentUser=null;
 
 // ── Hash ─────────────────────────────────────────────────────────────────────
@@ -902,6 +907,23 @@ function calcCosecha(){
 }
 document.addEventListener('input',function(e){if(['cosecha-cps','cosecha-precio'].includes(e.target.id))calcCosecha();});
 
+function renderTurnoFields(item){
+  var turnos=state.config.turnos||[{label:'Turno 1',desde:'5:00 AM',hasta:'8:00 AM'},{label:'Turno 2',desde:'8:00 AM',hasta:'12:00 PM'},{label:'Turno 3',desde:'12:00 PM',hasta:'6:00 PM'}];
+  var cont=document.getElementById('turnos-container');
+  if(!cont)return;
+  cont.innerHTML=turnos.map(function(t,i){
+    var kg=item&&item.turnos&&item.turnos[i]?item.turnos[i].kilos:'';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);margin-bottom:8px">'+
+      '<div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--accent)">'+t.label+'</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+t.desde+' → '+t.hasta+'</div></div>'+
+      '<div style="display:flex;align-items:center;gap:6px">'+
+      '<input type="number" id="t'+(i+1)+'-kg" value="'+kg+'" placeholder="0" min="0" step="0.1" oninput="calcTurnos()"'+
+      ' style="width:90px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;font-weight:700;text-align:center">'+
+      '<span style="font-size:12px;color:var(--text2)">kg</span></div></div>';
+  }).join('');
+  calcTurnos();
+}
+
 function renderCosecha(){
   fillRecSelect(['f-cosecha-rec']);
   var ff=document.getElementById('f-cosecha-fecha')||{value:''};
@@ -922,13 +944,49 @@ function renderCosecha(){
 }
 function saveCosecha(){
   var recId=document.getElementById('cosecha-rec').value;
+  if(!recId){toast('Selecciona un recolector','error');return;}
   var rec=state.recolectores.find(function(r){return r.id===recId;});
-  var item={id:document.getElementById('cosecha-id').value||uid(),fecha:document.getElementById('cosecha-fecha').value||hoyCol(),recolectorId:recId,recolectorNombre:rec?rec.nombre:'Sin asignar',lote:document.getElementById('cosecha-lote').value||'',kilosCps:Number(document.getElementById('cosecha-cps').value)||0,kilosPerg:Number(document.getElementById('cosecha-perg').value)||0,precio:Number(document.getElementById('cosecha-precio').value)||0,notas:document.getElementById('cosecha-notas').value||''};
-  if(item.kilosCps<=0){toast('Ingresa los kilos cosechados','error');return;}
-  var idx=state.cosechas.findIndex(function(c){return c.id===item.id;});
+  var fecha=document.getElementById('cosecha-fecha').value||hoyCol();
+  var lote=document.getElementById('cosecha-lote').value||'';
+  var precio=Number(document.getElementById('cosecha-precio').value)||Number(state.config.precioCps)||0;
+  var notas=document.getElementById('cosecha-notas').value||'';
+  var turnos=state.config.turnos||[];
+  var turnoData=turnos.map(function(t,i){
+    var kg=Number(document.getElementById('t'+(i+1)+'-kg').value)||0;
+    return{label:t.label,desde:t.desde,hasta:t.hasta,kilos:kg};
+  });
+  var totalKg=turnoData.reduce(function(a,t){return a+t.kilos;},0);
+  if(totalKg<=0){toast('Ingresa al menos un turno con kilos','error');return;}
+  // Buscar registro existente del mismo recolector y fecha para actualizar
+  var existId=document.getElementById('cosecha-id').value;
+  var item={
+    id:existId||uid(),
+    fecha:fecha,
+    recolectorId:recId,
+    recolectorNombre:rec?rec.nombre:'Sin asignar',
+    lote:lote,
+    turnos:turnoData,
+    kilosCps:totalKg,
+    kilosPerg:Number(document.getElementById('cosecha-perg').value)||0,
+    precio:precio,
+    totalPago:totalKg*precio,
+    notas:notas
+  };
+  var idx=state.cosechas.findIndex(function(x){return x.id===item.id;});
   if(idx>=0)state.cosechas[idx]=item;else state.cosechas.push(item);
   save();closeModal('m-cosecha');renderCosecha();renderDashboard();
-  toast('Cosecha guardada: '+fmtKg(item.kilosCps),'success');
+  toast('✅ Cosecha guardada: '+fmtKg(totalKg)+' — '+fmt(item.totalPago),'success');
+}
+// Calcular total al ingresar kilos en cualquier turno
+function calcTurnos(){
+  var turnos=state.config.turnos||[];
+  var total=0;
+  turnos.forEach(function(_,i){
+    total+=Number(document.getElementById('t'+(i+1)+'-kg').value)||0;
+  });
+  var precio=Number(document.getElementById('cosecha-precio').value)||0;
+  var el=document.getElementById('cosecha-total-preview');
+  if(el)el.innerHTML='<span style="color:var(--accent)">Total: <b>'+fmtKg(total)+'</b></span>'+(precio>0?'  <span style="color:var(--green)">= <b>'+fmt(total*precio)+'</b></span>':'');
 }
 
 // ── RECOLECTORES ─────────────────────────────────────────────────────────────
