@@ -1350,7 +1350,7 @@ function recRenderDia(iso){
       '<button class="btn '+(registrado?'btn-secondary':'btn-primary')+' btn-sm" onclick="registrarKilosRecFecha(\''+r.id+'\',\''+iso+'\',this)" style="width:100%;margin-top:6px;font-size:12px">'+
         (registrado?'✏️ Editar cosecha':'☕ Registrar cosecha')+
       '</button>'+
-      '<button class="btn btn-secondary btn-sm" onclick="verResumenRec(\''+r.id+'\',this)" title="Resumen" style="font-size:12px">📊</button>'+
+      '<button class="btn btn-secondary btn-sm" onclick="verResumenRec(\''+r.id+'\')" title="Resumen" style="font-size:12px">📊</button>'+
       '</div>'+
     '</div>';
   });
@@ -1735,5 +1735,21 @@ window.addEventListener('resize',function(){clearTimeout(window._rt);window._rt=
     </div>
   </div>
 
+
+  <!-- Modal Resumen Semanal/Mensual -->
+  <div class="modal-overlay" id="m-resumen">
+    <div class="modal" style="max-width:680px">
+      <div class="modal-header">
+        <h3 class="modal-title" id="res-titulo">📊 Resumen</h3>
+        <button class="modal-close" onclick="closeModal('m-resumen')">✕</button>
+      </div>
+      <div id="res-resumen-cards"></div>
+      <div id="res-semanal" style="max-height:280px;overflow-y:auto"></div>
+      <div id="res-mensual" style="max-height:250px;overflow-y:auto"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal('m-resumen')">Cerrar</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
